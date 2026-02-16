@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockSaaS - Gestão de Matérias</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+    <section id="login-screen" class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-center text-blue-600">Login StockSaaS</h2>
+            <form id="auth-form" class="space-y-4">
+                <input type="email" id="email" placeholder="Seu e-mail" class="w-full p-2 border rounded" required>
+                <input type="password" id="password" placeholder="Sua senha" class="w-full p-2 border rounded" required>
+                <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Entrar / Cadastrar</button>
+            </form>
+        </div>
+    </section>
+
+    <section id="dashboard" class="hidden flex min-h-screen">
+        <aside class="w-64 bg-slate-900 text-white p-6 hidden md:block">
+            <h1 class="text-xl font-bold mb-10 text-blue-400">StockSaaS</h1>
+            <nav class="space-y-4">
+                <a href="#" class="block text-blue-400 font-bold">📦 Estoque</a>
+                <button id="btn-logout" class="block text-red-400 mt-10">Sair</button>
+            </nav>
+        </aside>
+
+        <main class="flex-1 p-8">
+            <header class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-bold">Painel de Matérias</h2>
+                <button onclick="openModal()" class="bg-blue-600 text-white px-4 py-2 rounded">+ Novo Item</button>
+            </header>
+
+            <div class="mb-6">
+                <input type="text" id="search" placeholder="Buscar matéria..." class="p-2 border rounded w-full max-w-xs" onkeyup="renderTable()">
+            </div>
+
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-100 border-b">
+                        <tr>
+                            <th class="p-4">Nome</th>
+                            <th class="p-4">Quantidade</th>
+                            <th class="p-4">Status</th>
+                            <th class="p-4 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-table">
+                        </tbody>
+                </table>
+            </div>
+        </main>
+    </section>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
