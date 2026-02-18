@@ -1,62 +1,135 @@
-// app.js
-const SUPABASE_URL = 'SUA_URL_DO_SUPABASE';
-const SUPABASE_KEY = 'SUA_ANON_KEY_DO_SUPABASE';
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// --- CONFIGURAÇÃO DE UI E ESTADO ---
 
-// Gerenciamento de Estado de Autenticação
-supabase.auth.onAuthStateChange((event, session) => {
-    if (session) {
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('dashboard').classList.remove('hidden');
-        fetchData(); // Busca dados do banco
+// Função para abrir/fechar o modal
+window.toggleModal = (open) => {
+    const modal = document.getElementById('modal');
+    if (open) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     } else {
-        document.getElementById('login-screen').classList.remove('hidden');
-        document.getElementById('dashboard').classList.add('hidden');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.getElementById('item-form').reset();
+    }
+};
+
+// --- MONITORAMENTO DE AUTENTICAÇÃO ---
+
+window.auth.onAuthStateChanged((user) => {
+    const loginScreen = document.getElementById('login-screen');
+    const dashboard = document.getElementById('dashboard');
+
+    if (user) {
+        loginScreen.classList.add('hidden');
+        dashboard.classList.remove('hidden');
+        escutarDados(user.uid); // Começa a ouvir o banco de dados
+    } else {
+        loginScreen.classList.remove('hidden');
+        dashboard.classList.add('hidden');
     }
 });
 
-// CREATE: Adicionar nova matéria
-async function addItem(nome, quantidade, unidade) {
-    const { data: { user } } = await supabase.auth.getUser();
-    
+// --- LÓGICA DE LOGIN / CADASTRO ---
+
+document.getElementById('auth-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+
+    try {
+        // Tenta fazer login
+        await window.fb.signInWithEmailAndPassword(window.auth, email, password);
+    } catch (error) {
+        // Se o usuário não existir, tenta cadastrar
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+            try {
+                await window.fb.createUserWithEmailAndPassword(window.auth, email, password);
+                alert("Conta criada com sucesso!");
+            } catch (signUpError) {
+                alert("Erro ao cadastrar: " + signUpError.message);
+            }
+        } else {
+            alert("Erro: " + error.message);
+        }
+    }
+});
+
+// Botão de Sair
+document.getElementById('btn-logout').addEventListener('click', () => window.auth.signOut());
+
+// --- OPERAÇÕES DO BANCO DE DADOS (CRUD) ---
+
+// Salvar novo item
+document.getElementById('item-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = window.auth.currentUser;
+    if (!user) return;
+
+    const nome = document.getElementById('item-nome').value;
+    const quantidade = Number(document.getElementById('item-qtd').value);
+    const unidade = document.getElementById('item-unidade').value;
+
+    // Lógica simples de status
     let status = 'em_estoque';
     if (quantidade <= 0) status = 'esgotado';
     else if (quantidade < 10) status = 'baixo_estoque';
 
-    const { error } = await supabase
-        .from('materias_primas')
-        .insert([{ nome, quantidade, unidade, status, user_id: user.id }]);
-    
-    if (!error) fetchData();
-}
-
-// READ: Buscar dados com Filtro
-async function fetchData() {
-    const searchTerm = document.getElementById('search').value;
-    
-    let query = supabase.from('materias_primas').select('*');
-    
-    if (searchTerm) {
-        query = query.ilike('nome', `%${searchTerm}%`);
+    try {
+        await window.fb.addDoc(window.fb.collection(window.db, "materias"), {
+            nome,
+            quantidade,
+            unidade,
+            status,
+            userId: user.uid,
+            createdAt: new Date()
+        });
+        toggleModal(false); // Fecha o modal após salvar
+    } catch (error) {
+        console.error("Erro ao salvar item:", error);
+        alert("Erro ao salvar no banco de dados.");
     }
+});
 
-    const { data, error } = await query.order('nome', { ascending: true });
-    
-    if (data) renderTable(data);
+// Escutar dados em tempo real (Realtime)
+function escutarDados(uid) {
+    const q = window.fb.query(
+        window.fb.collection(window.db, "materias"),
+        window.fb.where("userId", "==", uid)
+    );
+
+    // O onSnapshot atualiza a tela automaticamente quando o banco muda
+    window.fb.onSnapshot(q, (querySnapshot) => {
+        const items = [];
+        querySnapshot.forEach((doc) => {
+            items.push({ id: doc.id, ...doc.data() });
+        });
+        renderTable(items);
+    });
 }
 
-// DELETE
-async function deleteItem(id) {
-    if (confirm("Deseja excluir este item?")) {
-        await supabase.from('materias_primas').delete().eq('id', id);
-        fetchData();
+// Deletar item
+window.deleteItem = async (id) => {
+    if (confirm("Tem certeza que deseja excluir este item?")) {
+        try {
+            await window.fb.deleteDoc(window.fb.doc(window.db, "materias", id));
+        } catch (error) {
+            console.error("Erro ao deletar:", error);
+        }
     }
-}
+};
 
-// Renderização da UI
+// --- RENDERIZAÇÃO ---
+
 function renderTable(items) {
     const tbody = document.getElementById('inventory-table');
-    tbody.innerHTML = items.map(item => `
+    const searchTerm = document.getElementById('search').value.toLowerCase();
+
+    // Filtro de busca simples
+    const filteredItems = items.filter(item => 
+        item.nome.toLowerCase().includes(searchTerm)
+    );
+
+    tbody.innerHTML = filteredItems.map(item => `
         <tr class="border-b hover:bg-slate-50">
             <td class="p-4 font-medium">${item.nome}</td>
             <td class="p-4">${item.quantidade} ${item.unidade}</td>
@@ -65,8 +138,8 @@ function renderTable(items) {
                     ${item.status.replace('_', ' ')}
                 </span>
             </td>
-            <td class="p-4 text-right space-x-2">
-                <button onclick="deleteItem('${item.id}')" class="text-red-500 hover:underline">Excluir</button>
+            <td class="p-4 text-right">
+                <button onclick="deleteItem('${item.id}')" class="text-red-500 hover:text-red-700 font-bold">Excluir</button>
             </td>
         </tr>
     `).join('');
@@ -78,3 +151,8 @@ function getStatusClass(status) {
     return 'bg-red-100 text-red-700';
 }
 
+// Ouvinte para a barra de busca
+document.getElementById('search').addEventListener('input', () => {
+    // Como estamos usando onSnapshot, podemos apenas forçar um re-render 
+    // ou deixar o Firebase lidar. Aqui, para busca local, chamamos a renderização.
+});
